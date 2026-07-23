@@ -1,0 +1,17 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sap_import_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sap_import
+      POSTGRES_PASSWORD: sap_import
+      POSTGRES_DB: sap_import
+    ports:
+      - "55432:5432"
+    volumes:
+      - sap_import_data:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+
+volumes:
+  sap_import_data:

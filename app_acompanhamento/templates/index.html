@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ApontaSAP — GreyLogix</title>
+  <link rel="stylesheet" href="/static/css/style.css?v=1" />
+  <script>
+    (function(){
+      var s = localStorage.getItem("app_theme_mode")||"light";
+      var d = s==="dark"||(s==="system"&&window.matchMedia("(prefers-color-scheme:dark)").matches);
+      document.documentElement.setAttribute("data-theme", d?"dark":"light");
+    })();
+  </script>
+</head>
+<body>
+
+  <!-- TOPBAR ─────────────────────────────────────────────── -->
+  <header class="topbar">
+
+    <div class="shell-top-row">
+      <div class="shell-top-main">
+        <div class="header-brand">GreyLogix</div>
+        <span class="header-sep">|</span>
+        <div class="header-module">ApontaSAP</div>
+      </div>
+      <div class="shell-top-actions">
+        <button class="btn-theme-toggle" id="btnThemeToggle" title="Alternar tema claro/escuro">🌕</button>
+      </div>
+    </div>
+
+    <!-- Linha 2: ambiente / modo / rodar agora ────────────── -->
+    <div class="filter-bar" id="configBar">
+      <span class="fb-select" style="display:inline-flex;align-items:center;cursor:default;">Ambiente: Produção</span>
+
+      <input type="date" id="dataReferencia" class="fb-input" title="Data de referência (default: dia anterior)">
+
+      <label class="toggle-modo">
+        <input type="checkbox" id="chkModoAutomatico">
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        <span id="modoLabel">Manual</span>
+      </label>
+
+      <button class="btn ghost" id="btnVerPreview">Ver preview</button>
+      <button class="btn primary fb-apply" id="btnRodarAgora">Rodar agora</button>
+    </div>
+
+  </header>
+
+  <!-- CONTEÚDO PRINCIPAL ──────────────────────────────────── -->
+  <main class="main-content">
+
+    <div class="alert alert-warning hidden" id="avisoCarregando">Consultando Odoo e validando contra o SAP (HANA) — só leitura...</div>
+    <div class="alert alert-error hidden" id="avisoErro"></div>
+
+    <section class="card">
+      <div class="section-title">Envio diário automático</div>
+      <p style="font-size:.85rem;color:var(--mut);margin:0 0 12px;line-height:1.5;">
+        Todos os dias às 02:00, uma Tarefa Agendada do Windows dispara este fluxo automaticamente —
+        lê os apontamentos do Odoo validados no <strong>dia anterior</strong> e envia pro SAP
+        de produção, reconciliando contra o que já existe. O toggle acima muda o modo
+        (manual/automático) e "Rodar agora" dispara um envio de verdade agora mesmo.
+      </p>
+
+      <div class="hidden" id="progressoWrap">
+        <div class="progress-bar-outer"><div class="progress-bar-inner" id="progressBar"></div></div>
+        <div class="log-box" id="logBox"></div>
+        <div class="alert alert-success hidden" id="resumoEnvio"></div>
+      </div>
+    </section>
+
+    <!-- PREVIEW (só leitura) ───────────────────────────────── -->
+    <section class="kpi-row hidden" id="kpiRow"></section>
+
+    <section class="card hidden" id="previewSection">
+      <div class="section-title">Preview do dia (só leitura)</div>
+      <div class="table-wrapper">
+        <table id="gridPreview">
+          <thead>
+            <tr>
+              <th>Nº</th><th>Colaborador</th><th>Data</th><th>Projeto</th><th>IdSAP</th>
+              <th>Tarefa</th><th class="col-valor">Horas</th><th>Employee ID SAP</th>
+              <th>Status</th><th>Motivo</th>
+            </tr>
+          </thead>
+          <tbody id="gridBody">
+            <tr><td colspan="10" class="empty-state">Clique em "Ver preview" para visualizar.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- HISTÓRICO ────────────────────────────────────────── -->
+    <section class="card">
+      <div class="section-title">
+        Histórico de execuções
+        <label class="fb-check-inline" style="margin-left:auto;font-weight:400;font-size:.72rem;">De
+          <input type="date" id="exportDataInicio" class="fb-input" style="width:145px">
+        </label>
+        <label class="fb-check-inline" style="font-weight:400;font-size:.72rem;">até
+          <input type="date" id="exportDataFim" class="fb-input" style="width:145px">
+        </label>
+        <button class="btn ghost" id="btnExportarHistorico">⬇ Exportar histórico completo</button>
+        <button class="btn ghost" id="btnAtualizarHistorico">Atualizar histórico</button>
+      </div>
+      <div class="table-wrapper">
+        <table id="gridHistorico">
+          <thead>
+            <tr>
+              <th>ID</th><th>Origem</th><th>Ambiente</th><th>Referência</th><th>Status</th>
+              <th class="col-valor">Total</th><th class="col-valor">Enviadas</th>
+              <th class="col-valor">Já existentes</th><th class="col-valor">Puladas</th>
+              <th class="col-valor">Erros</th><th>Iniciado em</th><th>Finalizado em</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="historicoBody">
+            <tr><td colspan="13" class="empty-state">Sem execuções ainda.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- MODAL — detalhe de erros de uma execução ─────────────── -->
+  <div class="modal-overlay hidden" id="modalOverlay">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <span id="modalTitle">Erros da execução</span>
+        <button class="btn ghost" id="modalClose">Fechar</button>
+      </div>
+      <div class="table-wrapper" style="max-height:60vh">
+        <table id="modalTable">
+          <thead>
+            <tr>
+              <th>Linha</th><th>Colaborador</th><th>Data</th><th>Projeto</th>
+              <th>IdSAP</th><th class="col-valor">Horas</th><th>Status</th>
+              <th>Motivo</th><th>Payload enviado</th><th>Resposta do SAP</th>
+            </tr>
+          </thead>
+          <tbody id="modalBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL — JSON de payload/resposta ──────────────────────── -->
+  <div class="modal-overlay hidden" id="jsonModalOverlay">
+    <div class="modal-panel" style="width:min(700px,100%)">
+      <div class="modal-header">
+        <span id="jsonModalTitle">Payload JSON</span>
+        <div style="display:flex;gap:8px">
+          <button class="btn ghost" id="jsonModalCopy">📋 Copiar</button>
+          <button class="btn ghost" id="jsonModalClose">Fechar</button>
+        </div>
+      </div>
+      <pre class="log-box" id="jsonModalContent" style="max-height:60vh"></pre>
+    </div>
+  </div>
+
+  <script src="/static/js/acompanhamento.js?v=3"></script>
+</body>
+</html>
