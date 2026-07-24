@@ -40,11 +40,19 @@ class OdooClient:
         domain = [["date", ">=", data_de], ["validated", "=", True], ["unit_amount", ">", 0]]
         return self.search_read("account.analytic.line", domain, _CAMPOS_APONTAMENTOS)
 
-    def buscar_apontamentos_do_dia(self, data: str) -> list[dict]:
-        """Apontamentos aprovados de um dia exato (usado pelo envio diario automatico -
-        so o dia anterior, sem acumular backlog de dias perdidos). Ignora apontamentos com
-        horas <= 0 (negativos ou zerados nunca vao pro SAP)."""
-        domain = [["date", "=", data], ["validated", "=", True], ["unit_amount", ">", 0]]
+    def buscar_apontamentos_validados_no_dia(self, data: str) -> list[dict]:
+        """Apontamentos que foram VALIDADOS num dia exato (usado pelo envio diario automatico -
+        so o dia anterior, sem acumular backlog de dias perdidos). Nao ha campo dedicado de
+        'data de validacao' no Odoo, entao usa 'write_date' (ultima modificacao do registro)
+        como aproximacao - assume que validar e a ultima acao feita no apontamento. O dia
+        efetivamente TRABALHADO (campo 'date') pode ser diferente e vem em cada linha normalmente.
+        Ignora apontamentos com horas <= 0 (negativos ou zerados nunca vao pro SAP)."""
+        domain = [
+            ["write_date", ">=", f"{data} 00:00:00"],
+            ["write_date", "<=", f"{data} 23:59:59"],
+            ["validated", "=", True],
+            ["unit_amount", ">", 0],
+        ]
         return self.search_read("account.analytic.line", domain, _CAMPOS_APONTAMENTOS)
 
     def buscar_apontamentos_periodo(self, data_inicio: str, data_fim: str) -> list[dict]:

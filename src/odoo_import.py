@@ -56,9 +56,9 @@ def _montar_linhas_de_apontamentos(hana: HanaClient, odoo: OdooClient, apontamen
 
 
 def montar_linhas_odoo(hana: HanaClient, odoo: OdooClient, data: str) -> list[dict]:
-    """Busca apontamentos aprovados no Odoo pra um dia exato - usado pelo envio diario
-    automatico (tela /automatico, sempre 'ontem')."""
-    apontamentos = odoo.buscar_apontamentos_do_dia(data)
+    """Busca apontamentos VALIDADOS no Odoo num dia exato (nao o dia trabalhado, o dia da
+    validacao) - usado pelo envio diario automatico (tela /automatico, sempre 'ontem')."""
+    apontamentos = odoo.buscar_apontamentos_validados_no_dia(data)
     return _montar_linhas_de_apontamentos(hana, odoo, apontamentos)
 
 
