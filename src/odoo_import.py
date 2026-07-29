@@ -16,10 +16,13 @@ def _montar_linhas_de_apontamentos(hana: HanaClient, odoo: OdooClient, apontamen
     empid_por_email = hana.buscar_funcionarios_ativos_com_email()
     usuarios_odoo = {u["id"]: u["login"] for u in odoo.buscar_usuarios()}
 
+    task_ids = {ap["task_id"][0] for ap in apontamentos if ap.get("task_id")}
+    id_sap_raiz_por_task = odoo.buscar_id_sap_tarefa_principal(list(task_ids))
+
     vistos = set()
     linhas = []
     for ap in apontamentos:
-        linha = normalizar_apontamento_odoo(ap, usuarios_odoo, empid_por_email)
+        linha = normalizar_apontamento_odoo(ap, usuarios_odoo, empid_por_email, id_sap_raiz_por_task)
 
         assinatura = (linha["colaborador"], linha["data"], linha["projeto_sap"], linha["idsap"],
                       linha["tarefa"], linha["descricao_apontamento"], round(linha["horas_apontadas"], 2))
