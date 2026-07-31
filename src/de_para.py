@@ -4,19 +4,18 @@ from src.reconciler import SapIndex, normalizar_projeto
 
 
 def normalizar_apontamento_odoo(ap: dict, usuarios_odoo: dict, empid_por_email: dict,
-                                 id_sap_raiz_por_task: dict | None = None) -> dict:
+                                 id_sap_por_task: dict | None = None) -> dict:
     """Extrai/normaliza um registro cru do Odoo (account.analytic.line) pro formato comum
     usado tanto pelo relatorio DE-PARA quanto pelo envio diario automatico (src/odoo_import.py).
     'usuarios_odoo' e {user_id: login}, 'empid_por_email' e {email-minusculo: empID}.
-    'id_sap_raiz_por_task' e {task_id: x_studio_id_sap da tarefa RAIZ} (ver
-    OdooClient.buscar_id_sap_tarefa_principal) - o ActivityType enviado ao SAP e sempre o da
-    tarefa principal (raiz da hierarquia, subindo por parent_id quantos niveis precisar),
-    nunca o de uma subtarefa/tarefa intermediaria."""
+    'id_sap_por_task' e {task_id: x_studio_id_sap} (ver OdooClient.buscar_id_sap_tarefas) - o
+    ActivityType enviado ao SAP e sempre o x_studio_id_sap preenchido na propria tarefa vinculada
+    ao apontamento (modulo de Projetos), sem subir pra tarefa pai/raiz."""
     data = str(ap.get("date") or "")[:10]
     user_id, colaborador = (ap["user_id"] or [None, None])
     project_id, projeto_odoo = (ap["project_id"] or [None, None])
     task_id, tarefa = (ap["task_id"] or [None, None])
-    idsap = (id_sap_raiz_por_task or {}).get(task_id) if task_id else None
+    idsap = (id_sap_por_task or {}).get(task_id) if task_id else None
     projeto_sap = ap.get("x_studio_related_field_74a_1jojldopb") or normalizar_projeto(projeto_odoo)
     horas = float(ap.get("unit_amount") or 0)
     descricao = ap.get("name") or None
@@ -56,12 +55,12 @@ def gerar_de_para_odoo(hana: HanaClient, odoo: OdooClient, data_corte: str,
     apontamentos = odoo.buscar_apontamentos(data_corte)
 
     task_ids = {ap["task_id"][0] for ap in apontamentos if ap.get("task_id")}
-    id_sap_raiz_por_task = odoo.buscar_id_sap_tarefa_principal(list(task_ids))
+    id_sap_por_task = odoo.buscar_id_sap_tarefas(list(task_ids))
 
     vistos = set()
     resultado = []
     for ap in apontamentos:
-        linha = normalizar_apontamento_odoo(ap, usuarios_odoo, empid_por_email, id_sap_raiz_por_task)
+        linha = normalizar_apontamento_odoo(ap, usuarios_odoo, empid_por_email, id_sap_por_task)
 
         assinatura = (linha["colaborador"], linha["data"], linha["projeto_sap"], linha["idsap"],
                       linha["tarefa"], linha["descricao_apontamento"], round(linha["horas_apontadas"], 2))

@@ -67,12 +67,10 @@ class OdooClient:
     def buscar_usuarios(self) -> list[dict]:
         return self.search_read("res.users", [], ["login", "id", "name"])
 
-    def buscar_id_sap_tarefa_principal(self, task_ids: list[int]) -> dict[int, str | None]:
-        """Pra cada task_id, resolve o x_studio_id_sap da tarefa RAIZ (sobe recursivamente por
-        parent_id ate a tarefa que nao tem mais pai) - a regra de negocio e que o ActivityType
-        enviado ao SAP e sempre o da tarefa principal (raiz da arvore), nunca o de uma
-        subtarefa/tarefa intermediaria, mesmo que ela tenha seu proprio x_studio_id_sap
-        preenchido com um valor diferente.
+    def buscar_id_sap_tarefas(self, task_ids: list[int]) -> dict[int, str | None]:
+        """Pra cada task_id, le o x_studio_id_sap preenchido na propria tarefa (modulo de
+        Projetos do Odoo) - o ActivityType enviado ao SAP e sempre o da tarefa vinculada ao
+        apontamento, sem subir pra tarefa pai/raiz.
 
         Depende da credencial do Odoo (ODOO_USERNAME/ODOO_API_KEY) ter acesso de leitura ao
         project.task pra qualquer tarefa (a conta de integracao foi adicionada como seguidora
@@ -82,22 +80,6 @@ class OdooClient:
         if not task_ids:
             return {}
 
-        tarefas: dict[int, dict] = {}
-        pendentes = set(task_ids)
-        while pendentes:
-            rows = self.search_read("project.task", [["id", "in", list(pendentes)]],
-                                     ["parent_id", "x_studio_id_sap"], limit=len(pendentes))
-            for r in rows:
-                parent_id = r["parent_id"][0] if r.get("parent_id") else None
-                tarefas[r["id"]] = {"parent_id": parent_id, "x_studio_id_sap": r.get("x_studio_id_sap") or None}
-            pendentes = {t["parent_id"] for t in tarefas.values() if t["parent_id"]} - set(tarefas.keys())
-
-        def resolver_raiz(task_id: int) -> str | None:
-            atual = task_id
-            visitados = set()
-            while atual in tarefas and tarefas[atual]["parent_id"] and atual not in visitados:
-                visitados.add(atual)
-                atual = tarefas[atual]["parent_id"]
-            return tarefas.get(atual, {}).get("x_studio_id_sap")
-
-        return {task_id: resolver_raiz(task_id) for task_id in task_ids}
+        rows = self.search_read("project.task", [["id", "in", list(task_ids)]],
+                                 ["x_studio_id_sap"], limit=len(task_ids))
+        return {r["id"]: r.get("x_studio_id_sap") or None for r in rows}
