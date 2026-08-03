@@ -1,6 +1,12 @@
 import requests
 
 from src.config import SapEnvConfig
+from src.retry import com_retry
+
+# So retry em falha de rede antes de qualquer resposta chegar (timeout/conexao recusada) -
+# nunca em HTTPError ou resposta de negocio, onde o servidor pode ja ter recebido/processado
+# o POST e um retry duplicaria o envio do apontamento.
+_ERROS_TRANSITORIOS = (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
 
 
 class SapError(Exception):
@@ -19,18 +25,23 @@ class SapClient:
         self._login()
 
     def _login(self):
-        resp = self.session.post(
-            f"{self.env.base_url}/Login",
+        resp = com_retry(
+            self.session.post, f"{self.env.base_url}/Login",
             json={
                 "CompanyDB": self.env.company_db,
                 "UserName": self.env.username,
                 "Password": self.env.password,
             },
             timeout=30,
+            excecoes=_ERROS_TRANSITORIOS,
         )
         resp.raise_for_status()
 
     def _request(self, method: str, path: str, retried: bool = False, **kwargs) -> requests.Response:
+        # Sem retry aqui de proposito: isso cobre o POST do timesheet, e um timeout pode
+        # acontecer DEPOIS do SAP ja ter recebido/criado o lancamento (so a resposta que se
+        # perdeu) - reenviar as cegas arriscaria duplicar horas lancadas. Falha de rede aqui
+        # vira 'erro_envio' (ver core.py::enviar_linha) pra revisao manual, nao retry automatico.
         resp = self.session.request(method, f"{self.env.base_url}{path}", timeout=60, **kwargs)
         if resp.status_code == 401 and not retried:
             self._login()

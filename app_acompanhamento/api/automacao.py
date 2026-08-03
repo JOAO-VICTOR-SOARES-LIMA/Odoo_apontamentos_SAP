@@ -1,9 +1,11 @@
 import datetime
+import logging
 import os
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
+from src.alertas import notificar_falha
 from src.config import load_config
 from src.db import Historico
 from src.odoo_import import gerar_preview_odoo, rodar_importacao_odoo
@@ -11,6 +13,7 @@ from src.odoo_import import gerar_preview_odoo, rodar_importacao_odoo
 from app_acompanhamento.state import state
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _dsn_ou_erro() -> str:
@@ -105,6 +108,8 @@ def _run_automacao(config, data_referencia: str):
             state.automacao["execucao_id"] = execucao_id
             state.automacao["resumo"] = hist.resumo_execucao(execucao_id)
     except Exception as exc:
+        logger.exception("falha na execucao de 'rodar agora' (data_referencia=%s)", data_referencia)
+        notificar_falha("ApontaSAP: falha no 'rodar agora'", f"data_referencia={data_referencia}: {exc}")
         with state.lock:
             state.automacao["erro"] = str(exc)
     finally:

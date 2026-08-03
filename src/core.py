@@ -44,7 +44,8 @@ def montar_contexto_com_linhas(config: Config, linhas: list, abrir_sap: bool = F
     as linhas prontas em vez de ler do Excel - usado pelo fluxo de importacao direto do Odoo
     (src/odoo_import.py), que monta as linhas por outra via."""
     hana = HanaClient(config.hana.host, config.hana.port, config.hana.user,
-                       config.hana.password, config.hana.schema)
+                       config.hana.password, config.hana.schema,
+                       config.hana.ssl_validate_certificate)
 
     datas_validas = [l["data"] for l in linhas if l.get("data")]
     data_min = min(datas_validas) if datas_validas else None

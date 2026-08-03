@@ -44,6 +44,23 @@ CREATE INDEX IF NOT EXISTS idx_import_linha_execucao ON import_linha(execucao_id
 CREATE INDEX IF NOT EXISTS idx_import_linha_status ON import_linha(status);
 CREATE INDEX IF NOT EXISTS idx_import_linha_colab_data ON import_linha(colaborador, data);
 
+-- Log de aplicacao (substitui os antigos logs em arquivo/print) - alimentado pelo
+-- PostgresLogHandler (src/log_handler.py), configurado via src/logging_setup.py tanto
+-- na app FastAPI quanto no script agendado (scripts/run_import_odoo_automatico.py).
+CREATE TABLE IF NOT EXISTS app_log (
+    id           BIGSERIAL PRIMARY KEY,
+    criado_em    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    nivel        TEXT NOT NULL,   -- INFO | WARNING | ERROR | ...
+    logger       TEXT NOT NULL,   -- nome do logger (modulo de origem)
+    mensagem     TEXT NOT NULL,
+    execucao_id  INT REFERENCES import_execucao(id),
+    detalhes     TEXT             -- traceback, quando o registro vier de uma excecao
+);
+
+CREATE INDEX IF NOT EXISTS idx_app_log_criado_em ON app_log(criado_em);
+CREATE INDEX IF NOT EXISTS idx_app_log_nivel ON app_log(nivel);
+CREATE INDEX IF NOT EXISTS idx_app_log_execucao ON app_log(execucao_id);
+
 -- Flag manual/automatico do envio diario Odoo -> SAP (linha unica, id sempre 1).
 -- O agendamento em si e uma Tarefa Agendada do Windows que roda todo dia as 2h;
 -- essa tabela so diz se o script deve realmente enviar (automatico) ou so logar e sair (manual).

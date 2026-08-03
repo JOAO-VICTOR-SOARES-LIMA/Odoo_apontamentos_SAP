@@ -1,5 +1,11 @@
 import xmlrpc.client
 
+from src.retry import com_retry
+
+# Falha de rede (nao erro de negocio - xmlrpc.client.Fault fica de fora de proposito) - seguro
+# pra retry, ja que OdooClient e somente leitura em toda a aplicacao.
+_ERROS_TRANSITORIOS = (ConnectionError, TimeoutError, OSError)
+
 _CAMPOS_APONTAMENTOS = [
     "date", "user_id", "project_id", "name", "task_id", "unit_amount",
     "x_studio_related_field_74a_1jojldopb",
@@ -21,16 +27,18 @@ class OdooClient:
 
     def _autenticar(self) -> int:
         if self._uid is None:
-            self._uid = self._common.authenticate(self.db, self.username, self.api_key, {})
+            self._uid = com_retry(self._common.authenticate, self.db, self.username, self.api_key, {},
+                                   excecoes=_ERROS_TRANSITORIOS)
             if not self._uid:
                 raise ValueError("Falha ao autenticar no Odoo - verifique db/usuario/api_key")
         return self._uid
 
     def search_read(self, model: str, domain: list, fields: list[str], limit: int = 10000) -> list[dict]:
         uid = self._autenticar()
-        return self._object.execute_kw(
-            self.db, uid, self.api_key, model, "search_read",
+        return com_retry(
+            self._object.execute_kw, self.db, uid, self.api_key, model, "search_read",
             [domain], {"fields": fields, "limit": limit},
+            excecoes=_ERROS_TRANSITORIOS,
         )
 
     def buscar_apontamentos(self, data_de: str) -> list[dict]:

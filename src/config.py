@@ -21,6 +21,7 @@ class HanaConfig:
     user: str
     password: str
     schema: str
+    ssl_validate_certificate: bool = False
 
 
 @dataclass
@@ -81,8 +82,10 @@ def _hana_config(env: str) -> HanaConfig:
     if faltando:
         raise ValueError(f"Variaveis de ambiente ausentes para HANA [{env}]: {', '.join(faltando)}")
 
+    ssl_validate_certificate = os.environ.get("HANA_SSL_VALIDATE_CERTIFICATE", "false").lower() == "true"
     return HanaConfig(host=host, port=int(os.environ.get("HANA_PORT", "30015")),
-                       user=user, password=password, schema=schema)
+                       user=user, password=password, schema=schema,
+                       ssl_validate_certificate=ssl_validate_certificate)
 
 
 def _odoo_config() -> OdooConfig:

@@ -7,24 +7,13 @@ from pathlib import Path
 RAIZ_PROJETO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ_PROJETO))
 
+from src.alertas import notificar_falha
 from src.config import load_config
 from src.db import Historico
+from src.logging_setup import configurar_logging
 from src.odoo_import import rodar_importacao_odoo
 
 logger = logging.getLogger("odoo_automatico")
-
-
-def configurar_log():
-    pasta_logs = RAIZ_PROJETO / "logs"
-    pasta_logs.mkdir(exist_ok=True)
-    handler_arquivo = logging.FileHandler(pasta_logs / "odoo_automatico.log", encoding="utf-8")
-    handler_stdout = logging.StreamHandler(sys.stdout)
-    formato = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
-    for h in (handler_arquivo, handler_stdout):
-        h.setFormatter(formato)
-    logger.setLevel(logging.INFO)
-    logger.addHandler(handler_arquivo)
-    logger.addHandler(handler_stdout)
 
 
 def main():
@@ -42,16 +31,15 @@ def main():
                          help="Obrigatorio junto com --send quando --env=prod, para evitar envio acidental")
     args = parser.parse_args()
 
-    configurar_log()
-
     dry_run = not args.send
     if args.env == "prod" and args.send and not args.confirm_prod:
-        logger.error("envio real para producao requer --send --confirm-prod explicitamente.")
+        print("envio real para producao requer --send --confirm-prod explicitamente.", file=sys.stderr)
         sys.exit(1)
 
     data_referencia = args.data or (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
 
     config = load_config(env=args.env)
+    configurar_logging(config.postgres_dsn)
     hist = Historico(config.postgres_dsn)
     try:
         modo = hist.ler_modo_automacao()
@@ -64,8 +52,10 @@ def main():
                     args.env, data_referencia, dry_run, origem)
         execucao_id = rodar_importacao_odoo(config, hist, data_referencia, dry_run, origem)
         logger.info("execucao %s concluida", execucao_id)
-    except Exception:
+    except Exception as exc:
         logger.exception("falha na execucao do envio diario automatico")
+        notificar_falha("ApontaSAP: falha no envio diario automatico",
+                         f"env={args.env} data_referencia={data_referencia}: {exc}")
         sys.exit(1)
     finally:
         hist.close()

@@ -1,7 +1,13 @@
 import re
 from hdbcli import dbapi
 
+from src.retry import com_retry
+
 _SELECT_ONLY = re.compile(r"^\s*SELECT\b", re.IGNORECASE)
+
+# Falha transitoria de rede/conexao com o HANA - seguro pra retry, ja que todo uso deste
+# cliente e somente leitura (SELECT), nunca tem efeito colateral duplicavel.
+_ERROS_TRANSITORIOS = (dbapi.Error,)
 
 
 class HanaSomenteLeituraError(Exception):
@@ -15,15 +21,13 @@ class HanaClient:
     Toda escrita no SAP continua acontecendo via Service Layer (sap_client.py) -
     este cliente nunca deve executar INSERT/UPDATE/DELETE."""
 
-    def __init__(self, host: str, port: int, user: str, password: str, schema: str):
+    def __init__(self, host: str, port: int, user: str, password: str, schema: str,
+                 ssl_validate_certificate: bool = False):
         self.schema = schema
-        self.conn = dbapi.connect(
-            address=host,
-            port=port,
-            user=user,
-            password=password,
-            encrypt=True,
-            sslValidateCertificate=False,
+        self.conn = com_retry(
+            dbapi.connect, address=host, port=port, user=user, password=password,
+            encrypt=True, sslValidateCertificate=ssl_validate_certificate,
+            excecoes=_ERROS_TRANSITORIOS,
         )
         with self.conn.cursor() as cur:
             cur.execute(f'SET SCHEMA "{schema}"')
@@ -34,11 +38,15 @@ class HanaClient:
     def _select(self, sql: str, params: tuple = ()) -> list[dict]:
         if not _SELECT_ONLY.match(sql):
             raise HanaSomenteLeituraError("HanaClient so pode executar SELECT (uso exclusivo de leitura/validacao)")
-        with self.conn.cursor() as cur:
-            cur.execute(sql, params)
-            # aliases sem aspas voltam em maiusculo do HANA - normaliza pra minusculo
-            colunas = [d[0].lower() for d in cur.description]
-            return [dict(zip(colunas, row)) for row in cur.fetchall()]
+
+        def _executar():
+            with self.conn.cursor() as cur:
+                cur.execute(sql, params)
+                # aliases sem aspas voltam em maiusculo do HANA - normaliza pra minusculo
+                colunas = [d[0].lower() for d in cur.description]
+                return [dict(zip(colunas, row)) for row in cur.fetchall()]
+
+        return com_retry(_executar, excecoes=_ERROS_TRANSITORIOS)
 
     def buscar_lancamentos_existentes(self, data_de: str) -> list[dict]:
         """Junta cabecalho (OTSH) e linhas (TSH1) do modulo de Project Management Timesheet.

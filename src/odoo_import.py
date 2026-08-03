@@ -1,3 +1,5 @@
+import logging
+
 from src.agenda import horas_decimais_para_hhmm
 from src.config import Config
 from src.core import enviar_em_lotes, fechar_contexto, gerar_preview, montar_contexto_com_linhas
@@ -5,6 +7,8 @@ from src.db import Historico
 from src.de_para import normalizar_apontamento_odoo
 from src.hana_client import HanaClient
 from src.odoo_client import OdooClient
+
+logger = logging.getLogger(__name__)
 
 
 def _montar_linhas_de_apontamentos(hana: HanaClient, odoo: OdooClient, apontamentos: list[dict]) -> list[dict]:
@@ -81,7 +85,8 @@ def gerar_preview_odoo(config: Config, data: str) -> list[dict]:
     /automatico, pra mostrar o que aconteceria antes de rodar de verdade."""
     odoo = OdooClient(config.odoo.url, config.odoo.db, config.odoo.username, config.odoo.api_key)
     hana_leitura = HanaClient(config.hana.host, config.hana.port, config.hana.user,
-                               config.hana.password, config.hana.schema)
+                               config.hana.password, config.hana.schema,
+                               config.hana.ssl_validate_certificate)
     try:
         linhas = montar_linhas_odoo(hana_leitura, odoo, data)
     finally:
@@ -101,18 +106,20 @@ def rodar_importacao_odoo(config: Config, hist: Historico, data: str, dry_run: b
     API), que decide a conexao pra poder ler a flag de modo automatico antes de chamar isso."""
     odoo = OdooClient(config.odoo.url, config.odoo.db, config.odoo.username, config.odoo.api_key)
     hana_leitura = HanaClient(config.hana.host, config.hana.port, config.hana.user,
-                               config.hana.password, config.hana.schema)
+                               config.hana.password, config.hana.schema,
+                               config.hana.ssl_validate_certificate)
     try:
         linhas = montar_linhas_odoo(hana_leitura, odoo, data)
     finally:
         hana_leitura.close()
 
     execucao_id = hist.criar_execucao(config.sap.nome, f"odoo:{data}", dry_run, origem=origem)
-    print(f"[execucao {execucao_id}] origem={origem} ambiente={config.sap.nome} "
-          f"dry_run={dry_run} data_referencia={data}")
+    extra = {"execucao_id": execucao_id}
+    logger.info("origem=%s ambiente=%s dry_run=%s data_referencia=%s",
+                origem, config.sap.nome, dry_run, data, extra=extra)
 
     ctx = montar_contexto_com_linhas(config, linhas, abrir_sap=not dry_run)
-    print(f"[execucao {execucao_id}] {len(ctx.linhas)} linhas carregadas do Odoo")
+    logger.info("%d linhas carregadas do Odoo", len(ctx.linhas), extra=extra)
 
     if dry_run:
         preview = gerar_preview(ctx)
@@ -123,7 +130,7 @@ def rodar_importacao_odoo(config: Config, hist: Historico, data: str, dry_run: b
     else:
         def callback(pos, total, row, resultado):
             if pos % config.batch_size == 0 or pos == total:
-                print(f"[execucao {execucao_id}] processadas {pos}/{total} linhas...")
+                logger.info("processadas %d/%d linhas...", pos, total, extra=extra)
             if callback_progresso:
                 callback_progresso(pos, total, row, resultado)
 
@@ -131,6 +138,6 @@ def rodar_importacao_odoo(config: Config, hist: Historico, data: str, dry_run: b
                          config.batch_sleep_seconds, callback_progresso=callback)
 
     resumo = hist.resumo_execucao(execucao_id)
-    print(f"[execucao {execucao_id}] concluida: {resumo}")
+    logger.info("concluida: %s", resumo, extra=extra)
     fechar_contexto(ctx)
     return execucao_id
