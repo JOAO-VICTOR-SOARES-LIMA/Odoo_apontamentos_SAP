@@ -19,6 +19,18 @@
   });
   aplicarBotaoTema();
 
+  // ── Logout ───────────────────────────────────────────────
+  // HTTP Basic Auth nao tem sessao no servidor pra invalidar - o navegador so esquece a
+  // credencial fechando a aba/janela. O truque padrao: manda uma credencial invalida via XHR
+  // (o navegador sobrescreve a credencial valida que tinha em cache pra esse endereco) e recarrega
+  // a pagina - sem credencial valida em cache, o navegador pede login de novo.
+  $("btnLogout").addEventListener("click", () => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("GET", "/", true, "logout", "logout");
+    xhr.onloadend = () => { window.location.reload(); };
+    xhr.send();
+  });
+
   // ── Ambiente ─────────────────────────────────────────────
   // Essa app so opera contra producao - sem seletor, sempre "prod".
   const AMBIENTE = "prod";
