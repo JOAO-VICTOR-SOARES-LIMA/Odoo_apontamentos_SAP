@@ -12,6 +12,11 @@ _CAMPOS_APONTAMENTOS = [
     "x_studio_local", "x_studio_hora_inicio_1", "x_studio_hora_fim_1", "x_studio_intervalo",
 ]
 
+# Apontamentos com essa tarefa sao time off (folga/ferias/ausencia) - nunca vao pro SAP,
+# entao ficam de fora ja na consulta ao Odoo (domain "task_id.name not in [...]").
+_TAREFAS_TIME_OFF = ["Time Off"]
+_FILTRO_SEM_TIME_OFF = ["task_id.name", "not in", _TAREFAS_TIME_OFF]
+
 
 class OdooClient:
     """Cliente XML-RPC minimo pro Odoo, usado exclusivamente para leitura (relatorio
@@ -44,8 +49,9 @@ class OdooClient:
     def buscar_apontamentos(self, data_de: str) -> list[dict]:
         """Apontamentos aprovados (campo 'validated') a partir de 'data_de' - mesmo criterio
         que o fluxo n8n ja usa hoje para decidir o que e candidato a envio pro SAP. Ignora
-        apontamentos com horas <= 0 (negativos ou zerados nunca vao pro SAP)."""
-        domain = [["date", ">=", data_de], ["validated", "=", True], ["unit_amount", ">", 0]]
+        apontamentos com horas <= 0 (negativos ou zerados nunca vao pro SAP) e os de time off."""
+        domain = [["date", ">=", data_de], ["validated", "=", True], ["unit_amount", ">", 0],
+                  _FILTRO_SEM_TIME_OFF]
         return self.search_read("account.analytic.line", domain, _CAMPOS_APONTAMENTOS)
 
     def buscar_apontamentos_validados_no_dia(self, data: str) -> list[dict]:
@@ -54,12 +60,13 @@ class OdooClient:
         'data de validacao' no Odoo, entao usa 'write_date' (ultima modificacao do registro)
         como aproximacao - assume que validar e a ultima acao feita no apontamento. O dia
         efetivamente TRABALHADO (campo 'date') pode ser diferente e vem em cada linha normalmente.
-        Ignora apontamentos com horas <= 0 (negativos ou zerados nunca vao pro SAP)."""
+        Ignora apontamentos com horas <= 0 (negativos ou zerados nunca vao pro SAP) e os de time off."""
         domain = [
             ["write_date", ">=", f"{data} 00:00:00"],
             ["write_date", "<=", f"{data} 23:59:59"],
             ["validated", "=", True],
             ["unit_amount", ">", 0],
+            _FILTRO_SEM_TIME_OFF,
         ]
         return self.search_read("account.analytic.line", domain, _CAMPOS_APONTAMENTOS)
 
@@ -67,9 +74,9 @@ class OdooClient:
         """Apontamentos aprovados dentro de um periodo (inclusive nas duas pontas) - usado pela
         importacao em massa direto do Odoo (fonte alternativa ao Excel), pra deixar o usuario
         escolher o intervalo em vez de um dia exato. Ignora apontamentos com horas <= 0
-        (negativos ou zerados nunca vao pro SAP)."""
+        (negativos ou zerados nunca vao pro SAP) e os de time off."""
         domain = [["date", ">=", data_inicio], ["date", "<=", data_fim],
-                  ["validated", "=", True], ["unit_amount", ">", 0]]
+                  ["validated", "=", True], ["unit_amount", ">", 0], _FILTRO_SEM_TIME_OFF]
         return self.search_read("account.analytic.line", domain, _CAMPOS_APONTAMENTOS)
 
     def buscar_usuarios(self) -> list[dict]:
