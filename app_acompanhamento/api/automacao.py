@@ -89,8 +89,14 @@ class RodarAgoraBody(BaseModel):
 
 
 def _run_automacao(config, data_referencia: str):
-    hist = Historico(config.postgres_dsn)
+    # Historico(...) fica DENTRO do try de proposito: se a conexao com o Postgres falhar aqui,
+    # precisa cair no except/finally igual a qualquer outra falha - senao a excecao escapa antes
+    # do try, o finally nunca roda, e 'em_andamento' fica travado em True pra sempre (todo
+    # proximo "Rodar agora" falharia com 409 ate reiniciar o container).
+    hist = None
     try:
+        hist = Historico(config.postgres_dsn)
+
         def callback(pos, total, row, resultado):
             with state.lock:
                 state.automacao["pos"] = pos
@@ -113,7 +119,8 @@ def _run_automacao(config, data_referencia: str):
         with state.lock:
             state.automacao["erro"] = str(exc)
     finally:
-        hist.close()
+        if hist is not None:
+            hist.close()
         with state.lock:
             state.automacao["em_andamento"] = False
 
