@@ -108,6 +108,8 @@ def _montar_payload(row: dict, projeto: str, start_time: str, end_time: str) -> 
                 "FinancialProject": projeto,
                 "Break": row.get("break_time") or "00:00",
                 "NonBillableTime": "00:00",
+                "U_Local": row.get("local") or "",
+                "U_EASY_Obs": row.get("descricao") or "",
             }
         ],
         "UserID": row["employee_id_sap"],
