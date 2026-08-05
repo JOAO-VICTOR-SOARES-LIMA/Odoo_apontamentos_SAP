@@ -1,0 +1,9 @@
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# ApontaSAP - envio diario automatico Odoo -> SAP, 02:00 horario de Sao Paulo (TZ configurado
+# no Dockerfile, container inteiro roda nesse fuso). O modo manual/automatico continua sendo
+# controlado pela tela /automatico do app (flag no Postgres) - esse cron sempre dispara, o
+# script e que decide se faz algo de verdade. ".env.runtime" (gerado por entrypoint.sh no
+# start do container) traz as variaveis de ambiente que o cron nao herda sozinho.
+0 2 * * * root source /app/.env.runtime && cd /app && python scripts/run_import_odoo_automatico.py --env prod --send --confirm-prod >> /app/logs/cron_envio.log 2>&1

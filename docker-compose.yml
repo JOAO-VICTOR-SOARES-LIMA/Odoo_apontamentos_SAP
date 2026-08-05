@@ -32,6 +32,11 @@ services:
       POSTGRES_DSN: ${APP_POSTGRES_DSN:-postgresql://sap_import:sap_import@postgres:5432/sap_import}
     ports:
       - "8010:8010"
+    volumes:
+      # Log do cron interno (envio diario as 02:00, ver docker/crontab) - sem isso some toda
+      # vez que o container e recriado (deploy). O log estruturado de verdade (info/erro de
+      # cada execucao) ja vai pro Postgres via app_log independente disso.
+      - ./logs:/app/logs
     depends_on:
       postgres:
         condition: service_healthy
